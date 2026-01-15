@@ -25,23 +25,46 @@ def append_to_csv(data):
 def scroll_and_collect_links(page, target_count):
     seen = set()
     last_len = 0
+    retry_count = 0
+    max_retries = 10
 
     while len(seen) < target_count:
         page.mouse.wheel(0, 30000)
-        time.sleep(2)
-        cards = page.query_selector_all("a[class*='_company_i9oky_355']")
+        time.sleep(3)
+        
+        # Try multiple selector strategies
+        cards = page.query_selector_all("a[href*='/companies/']")
+        
         if len(cards) == 0:
-            print("Loading error! retry to scrape.....")
+            retry_count += 1
+            print(f"Loading error! retry {retry_count}/{max_retries} to scrape.....")
+            
+            # Debug: save page content to see what's actually there
+            if retry_count == 3:
+                print("Saving page HTML for debugging...")
+                with open("data/debug_page.html", "w", encoding="utf-8") as f:
+                    f.write(page.content())
+                print("Page HTML saved to data/debug_page.html")
+            
+            if retry_count >= max_retries:
+                print("Max retries reached. Stopping.")
+                break
             continue
+        
+        retry_count = 0  # Reset on success
         for card in cards:
             href = card.get_attribute("href")
-            if href and "/companies/" in href:
+            if href and "/companies/" in href and not href.startswith("http"):
                 seen.add(href)
 
+        print(f"Found {len(seen)} company links so far...")
         if len(seen) == last_len:
             break
         last_len = len(seen)
 
+    # Create data directory if it doesn't exist
+    os.makedirs(os.path.dirname(JSON_PATH), exist_ok=True)
+    
     with open(JSON_PATH, "w") as f:
         json.dump(list(seen)[:target_count], f, indent=2)
 
